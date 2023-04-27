@@ -41,3 +41,7 @@ echo "Postgres available on port $DB_PORT."
 echo "Creating database..."
 sqlx database create --database-url=$DB_URL
 echo "Database created."
+
+echo "Migrating database..."
+sqlx migrate run --database-url=$DB_URL
+echo "Database migrated."
