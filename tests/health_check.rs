@@ -1,11 +1,13 @@
 use reqwest::{Client, StatusCode};
+use sqlx::{Connection, PgConnection};
 use std::net::TcpListener;
+use zero2prod::config::get_config;
 
 // Run a server in the background on a random port, and return the server address.
 fn spawn_app() -> String {
-    let listener = TcpListener::bind("127.0.0.1:0").expect("Failed to bind random port.");
+    let listener = TcpListener::bind("127.0.0.1:0").expect("Failed to bind random port");
     let port = listener.local_addr().unwrap().port();
-    let server = zero2prod::startup::run(listener).expect("Failed to run server.");
+    let server = zero2prod::startup::run(listener).expect("Failed to run server");
     let _ = tokio::spawn(server);
 
     format!("http://127.0.0.1:{}", port)
@@ -33,6 +35,10 @@ async fn health_check_works() {
 async fn subscribe_returns_200_for_valid_form_data() {
     // Arrange
     let address = spawn_app();
+    let cfg = get_config().expect("Failed to load config");
+    let mut conn = PgConnection::connect(&cfg.db.conn_string())
+        .await
+        .expect("Failed to connect to Postgres");
     let client = Client::new();
 
     // Act
@@ -43,10 +49,18 @@ async fn subscribe_returns_200_for_valid_form_data() {
         .body(body)
         .send()
         .await
-        .expect("Failed to execute request.");
+        .expect("Failed to execute request");
 
     // Assert
-    assert_eq!(StatusCode::OK, response.status())
+    assert_eq!(StatusCode::OK, response.status());
+
+    let saved = sqlx::query!("SELECT email, name FROM subscriptions")
+        .fetch_one(&mut conn)
+        .await
+        .expect("Failed to fetch saved subscription from DB");
+
+    assert_eq!("ursual_le_guin@gmail.com", saved.email);
+    assert_eq!("le guin", saved.name);
 }
 
 #[tokio::test]
@@ -68,13 +82,13 @@ async fn subscribe_returns_400_when_data_is_missing() {
             .body(invalid_body)
             .send()
             .await
-            .expect("Failed to execute request.");
+            .expect("Failed to execute request");
 
         // Assert
         assert_eq!(
             StatusCode::BAD_REQUEST,
             response.status(),
-            "{}: POST /subscriptions responded {}.",
+            "{}: POST /subscriptions responded {}",
             error_message,
             response.status()
         )
