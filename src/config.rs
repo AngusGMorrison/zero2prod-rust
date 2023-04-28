@@ -14,6 +14,13 @@ impl DBConfig {
             self.user, self.password, self.host, self.port, self.name
         )
     }
+
+    pub fn conn_string_without_db(&self) -> String {
+        format!(
+            "postgres://{}:{}@{}:{}",
+            self.user, self.password, self.host, self.port,
+        )
+    }
 }
 
 #[derive(serde::Deserialize)]
