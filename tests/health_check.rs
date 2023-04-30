@@ -1,6 +1,20 @@
+use once_cell::sync::Lazy;
 use reqwest::{Client, StatusCode};
 use sqlx::PgPool;
 use std::net::TcpListener;
+use zero2prod::{startup, telemetry};
+
+// Ensure that the `tracing` stack is initialized only once.
+static TRACING: Lazy<()> = Lazy::new(|| {
+    let subscriber_name = "test".to_string();
+    let default_log_level = "info".to_string();
+    let subscriber = if std::env::var("TEST_LOG").is_ok() {
+        telemetry::new_subscriber(subscriber_name, default_log_level, std::io::stdout)
+    } else {
+        telemetry::new_subscriber(subscriber_name, default_log_level, std::io::sink)
+    };
+    telemetry::init_subscriber(subscriber);
+});
 
 pub struct TestApp {
     pub address: String,
@@ -9,11 +23,12 @@ pub struct TestApp {
 
 // Run a server in the background on a random port, and return the server address.
 async fn spawn_app(pool: PgPool) -> TestApp {
+    Lazy::force(&TRACING);
     let listener = TcpListener::bind("127.0.0.1:0").expect("Failed to bind random port");
     let port = listener.local_addr().unwrap().port();
     let address = format!("http://127.0.0.1:{}", port);
 
-    let server = zero2prod::startup::run(listener, pool.clone()).expect("Failed to run server");
+    let server = startup::run(listener, pool.clone()).expect("Failed to run server");
     let _ = tokio::spawn(server);
 
     TestApp {
